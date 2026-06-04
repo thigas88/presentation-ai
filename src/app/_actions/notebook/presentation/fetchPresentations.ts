@@ -28,6 +28,9 @@ function hasSlideContent(value: Prisma.JsonValue): boolean {
 export async function fetchPresentations(
   page = 0,
   type?: PresentationDocumentTypeFilter,
+  options?: {
+    favoritesOnly?: boolean;
+  },
 ) {
   const actionName = "presentation.fetchPresentations.fetchPresentations";
   const span = logger.startSpan(`notebook.server_action.${actionName}`, {
@@ -56,6 +59,13 @@ export async function fetchPresentations(
       where: {
         userId,
         type: documentType,
+        ...(options?.favoritesOnly
+          ? {
+              favorites: {
+                some: { userId },
+              },
+            }
+          : {}),
       },
       orderBy: {
         updatedAt: "desc",

@@ -4,9 +4,14 @@ import {
   fetchPresentations,
   type PresentationDocumentTypeFilter,
 } from "@/app/_actions/notebook/presentation/fetchPresentations";
-import { createEmptyPresentation } from "@/app/_actions/notebook/presentation/presentationActions";
+import { togglePresentationFavorite } from "@/app/_actions/notebook/presentation/presentationFavoriteActions";
+import {
+  createEmptyPresentation,
+  deletePresentation,
+  duplicatePresentation,
+  updatePresentationTitle,
+} from "@/app/_actions/notebook/presentation/presentationActions";
 import { ModelPicker } from "@/components/notebook/presentation/components/ModelPicker";
-import { OutlineTemplateModal } from "@/components/notebook/presentation/components/outline/OutlineTemplateModal";
 import { useBlankPresentationCreator } from "@/hooks/presentation/useBlankPresentationCreator";
 import {
   getPresentationGenerationAspectRatioLabel,
@@ -15,26 +20,34 @@ import {
 import { buildPresentationCustomization } from "@/lib/presentation/customization";
 import { cn } from "@/lib/utils";
 import { usePresentationState } from "@/states/presentation-state";
-import { useInfiniteQuery } from "@tanstack/react-query";
+import {
+  type InfiniteData,
+  useInfiniteQuery,
+  useMutation,
+  useQueryClient,
+} from "@tanstack/react-query";
 import { formatDistanceToNow } from "date-fns";
 import {
   Archive,
   ArrowRight,
   Check,
   Clock3,
+  Copy,
   Folder,
   Globe,
   Grid2X2,
   Languages,
-  LayoutGrid,
   LayoutTemplate,
   List,
   Loader2,
+  MoreVertical,
   PanelsTopLeft,
+  Pencil,
   Plus,
   Search,
   SlidersHorizontal,
   Star,
+  Trash2,
   WandSparkles,
   X,
   type LucideIcon,
@@ -48,6 +61,14 @@ import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import {
+  Credenza,
+  CredenzaContent,
+  CredenzaDescription,
+  CredenzaFooter,
+  CredenzaHeader,
+  CredenzaTitle,
+} from "@/components/ui/credenza";
+import {
   DropdownMenu,
   DropdownMenuCheckboxItem,
   DropdownMenuContent,
@@ -58,6 +79,17 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { Input } from "@/components/ui/input";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 const PRESENTATIONS_QUERY_KEY = ["presentations"] as const;
 const ALL_PRESENTATION_DOCUMENT_TYPES = "ALL";
@@ -72,7 +104,22 @@ type PresentationFileItem = {
   modified: string;
   modifiedAt: Date;
   isFavorited: boolean;
+  isFavoritePending: boolean;
+  isRenamePending: boolean;
+  isDeletePending: boolean;
+  isDuplicatePending: boolean;
   onClick: () => void;
+  onToggleFavorite: () => void;
+  onRename: (nextName: string) => Promise<boolean>;
+  onDelete: () => Promise<boolean>;
+  onDuplicate: () => void;
+};
+
+type PresentationPage = Awaited<ReturnType<typeof fetchPresentations>>;
+type PresentationsInfiniteData = InfiniteData<PresentationPage, number>;
+type FavoriteMutationVariables = {
+  documentId: string;
+  isFavorited: boolean;
 };
 
 type LibraryTab = "all" | "recent" | "favorites";
@@ -229,6 +276,132 @@ function NotebookInputBox({
   );
 }
 
+function PresentationFavoriteButton({
+  file,
+  className,
+}: {
+  file: PresentationFileItem;
+  className?: string;
+}) {
+  return (
+    <button
+      type="button"
+      aria-label={
+        file.isFavorited
+          ? `Remove ${file.name} from favorites`
+          : `Add ${file.name} to favorites`
+      }
+      aria-pressed={file.isFavorited}
+      title={file.isFavorited ? "Remove from favorites" : "Add to favorites"}
+      disabled={file.isFavoritePending}
+      onClick={(event) => {
+        event.stopPropagation();
+        file.onToggleFavorite();
+      }}
+      className={cn(
+        "flex size-8 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-background hover:text-foreground disabled:cursor-wait disabled:opacity-70",
+        file.isFavorited && "text-yellow-500",
+        className,
+      )}
+    >
+      {file.isFavoritePending ? (
+        <Loader2 className="size-4 animate-spin" />
+      ) : (
+        <Star
+          className={cn(
+            "size-4",
+            file.isFavorited && "fill-yellow-400 text-yellow-500",
+          )}
+        />
+      )}
+    </button>
+  );
+}
+
+function PresentationFileActionsMenu({
+  file,
+  onRenameRequest,
+  onDeleteRequest,
+}: {
+  file: PresentationFileItem;
+  onRenameRequest: (file: PresentationFileItem) => void;
+  onDeleteRequest: (file: PresentationFileItem) => void;
+}) {
+  return (
+    <div
+      onClick={(event) => event.stopPropagation()}
+      onKeyDown={(event) => event.stopPropagation()}
+    >
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            className="size-8 rounded-full bg-background/90 text-muted-foreground shadow-sm backdrop-blur hover:bg-background hover:text-foreground"
+          >
+            <MoreVertical className="size-4" />
+            <span className="sr-only">Open presentation actions</span>
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end" className="w-52">
+          <DropdownMenuItem
+            disabled={file.isRenamePending}
+            onClick={() => onRenameRequest(file)}
+          >
+            {file.isRenamePending ? (
+              <Loader2 className="mr-2 size-4 animate-spin" />
+            ) : (
+              <Pencil className="mr-2 size-4" />
+            )}
+            Rename
+          </DropdownMenuItem>
+          <DropdownMenuItem
+            disabled={file.isDuplicatePending}
+            onClick={file.onDuplicate}
+          >
+            {file.isDuplicatePending ? (
+              <Loader2 className="mr-2 size-4 animate-spin" />
+            ) : (
+              <Copy className="mr-2 size-4" />
+            )}
+            Duplicate
+          </DropdownMenuItem>
+          <DropdownMenuItem
+            disabled={file.isFavoritePending}
+            onClick={file.onToggleFavorite}
+          >
+            {file.isFavoritePending ? (
+              <Loader2 className="mr-2 size-4 animate-spin" />
+            ) : (
+              <Star
+                className={cn(
+                  "mr-2 size-4",
+                  file.isFavorited && "fill-yellow-400 text-yellow-400",
+                )}
+              />
+            )}
+            {file.isFavorited ? "Remove from favorites" : "Add to favorites"}
+          </DropdownMenuItem>
+          <DropdownMenuSeparator />
+          <DropdownMenuItem
+            disabled={file.isDeletePending}
+            className="text-destructive focus:text-destructive"
+            onClick={() => onDeleteRequest(file)}
+          >
+            {file.isDeletePending ? (
+              <Loader2 className="mr-2 size-4 animate-spin" />
+            ) : (
+              <Trash2 className="mr-2 size-4" />
+            )}
+            Delete
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+    </div>
+  );
+}
+
 function PresentationProjectFilesSection({
   files,
   isLoading,
@@ -236,6 +409,10 @@ function PresentationProjectFilesSection({
   filterOptions,
   activeFilterId,
   onFilterChange,
+  activeTab,
+  onActiveTabChange,
+  showFavoritesOnly,
+  onShowFavoritesOnlyChange,
 }: {
   files: PresentationFileItem[];
   isLoading?: boolean;
@@ -243,13 +420,20 @@ function PresentationProjectFilesSection({
   filterOptions: { id: string; label: string }[];
   activeFilterId: string;
   onFilterChange: (filterId: string) => void;
+  activeTab: LibraryTab;
+  onActiveTabChange: (tab: LibraryTab) => void;
+  showFavoritesOnly: boolean;
+  onShowFavoritesOnlyChange: (showFavoritesOnly: boolean) => void;
 }) {
-  const [activeTab, setActiveTab] = useState<LibraryTab>("recent");
   const [searchQuery, setSearchQuery] = useState("");
   const [viewMode, setViewMode] = useState<ViewMode>("grid");
   const [sortBy, setSortBy] = useState<SortBy>("date-desc");
-  const [showFavoritesOnly, setShowFavoritesOnly] = useState(false);
   const [isSearchOpen, setIsSearchOpen] = useState(false);
+  const [renameTarget, setRenameTarget] =
+    useState<PresentationFileItem | null>(null);
+  const [renameValue, setRenameValue] = useState("");
+  const [deleteTarget, setDeleteTarget] =
+    useState<PresentationFileItem | null>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
 
   const tabs: { id: LibraryTab; label: string; icon: LucideIcon }[] = [
@@ -267,6 +451,32 @@ function PresentationProjectFilesSection({
   const activeFiltersCount =
     (showFavoritesOnly ? 1 : 0) +
     (activeFilterId !== filterOptions[0]?.id ? 1 : 0);
+  const isRenamePending = renameTarget
+    ? (files.find((file) => file.id === renameTarget.id)?.isRenamePending ??
+      renameTarget.isRenamePending)
+    : false;
+  const isDeletePending = deleteTarget
+    ? (files.find((file) => file.id === deleteTarget.id)?.isDeletePending ??
+      deleteTarget.isDeletePending)
+    : false;
+
+  const openRenameDialog = (file: PresentationFileItem) => {
+    setRenameTarget(file);
+    setRenameValue(file.name);
+  };
+
+  const closeRenameDialog = () => {
+    if (!isRenamePending) {
+      setRenameTarget(null);
+      setRenameValue("");
+    }
+  };
+
+  const closeDeleteDialog = () => {
+    if (!isDeletePending) {
+      setDeleteTarget(null);
+    }
+  };
 
   useEffect(() => {
     if (!shouldShowSearchInput) return;
@@ -304,7 +514,8 @@ function PresentationProjectFilesSection({
   }, [activeTab, files, searchQuery, showFavoritesOnly, sortBy]);
 
   return (
-    <div className="max-w-full min-w-0 overflow-x-hidden">
+    <>
+      <div className="max-w-full min-w-0 overflow-x-hidden">
       <div className="mb-4 flex min-w-0 flex-col gap-3 lg:flex-row lg:items-center lg:justify-between lg:gap-4">
         <div className="min-w-0">
           <div className="flex min-w-0 items-center gap-2 overflow-x-auto">
@@ -316,7 +527,7 @@ function PresentationProjectFilesSection({
                 <button
                   key={tab.id}
                   type="button"
-                  onClick={() => setActiveTab(tab.id)}
+                  onClick={() => onActiveTabChange(tab.id)}
                   className={cn(
                     "inline-flex h-9 shrink-0 items-center gap-2 rounded-lg px-3 text-sm font-medium transition-colors",
                     isActive
@@ -436,7 +647,7 @@ function PresentationProjectFilesSection({
                     <DropdownMenuLabel>Filter</DropdownMenuLabel>
                     <DropdownMenuItem
                       onClick={() =>
-                        setShowFavoritesOnly((previous) => !previous)
+                        onShowFavoritesOnlyChange(!showFavoritesOnly)
                       }
                       className="flex items-center justify-between"
                     >
@@ -581,9 +792,24 @@ function PresentationProjectFilesSection({
                     )}
                     <div className="absolute inset-0 bg-linear-to-t from-black/5 to-transparent opacity-0 transition-opacity group-hover:opacity-100" />
                   </div>
-                  {file.isFavorited ? (
-                    <Star className="pointer-events-none absolute top-2 right-2 z-20 size-4 fill-yellow-400 text-yellow-400" />
-                  ) : null}
+                  <div
+                    className={cn(
+                      "absolute top-2 right-2 z-30 flex items-center gap-1 transition-opacity",
+                      file.isFavorited
+                        ? "opacity-100"
+                        : "sm:opacity-0 sm:group-hover:opacity-100 sm:group-focus-within:opacity-100",
+                    )}
+                  >
+                    <PresentationFavoriteButton
+                      file={file}
+                      className="border border-border/70 bg-background/90 shadow-sm backdrop-blur"
+                    />
+                    <PresentationFileActionsMenu
+                      file={file}
+                      onRenameRequest={openRenameDialog}
+                      onDeleteRequest={setDeleteTarget}
+                    />
+                  </div>
                   <div className="pointer-events-none relative z-20 flex flex-1 flex-col p-3">
                     <div className="flex items-start justify-between gap-2">
                       <div className="min-w-0 flex-1">
@@ -635,32 +861,150 @@ function PresentationProjectFilesSection({
                         <p className="truncate text-sm font-medium text-foreground group-hover:text-primary">
                           {file.name}
                         </p>
-                        {file.isFavorited ? (
-                          <Star className="mt-0.5 size-3.5 shrink-0 fill-yellow-400 text-yellow-400" />
-                        ) : null}
                       </div>
                       <div className="mt-1 flex min-w-0 items-center gap-2 text-xs text-muted-foreground">
                         <span className="truncate">{file.modified}</span>
                       </div>
                     </div>
                   </div>
+                  <div className="relative z-20 flex shrink-0 items-center gap-1">
+                    <PresentationFavoriteButton file={file} />
+                    <PresentationFileActionsMenu
+                      file={file}
+                      onRenameRequest={openRenameDialog}
+                      onDeleteRequest={setDeleteTarget}
+                    />
+                  </div>
                 </div>
               ))}
             </div>
           )}
       </div>
-    </div>
+      </div>
+
+      <Credenza
+        open={Boolean(renameTarget)}
+        onOpenChange={(open) => {
+          if (!open) {
+            closeRenameDialog();
+          }
+        }}
+      >
+        <CredenzaContent className="sm:max-w-md">
+          <CredenzaHeader>
+            <CredenzaTitle>Rename presentation</CredenzaTitle>
+            <CredenzaDescription>
+              Choose a new name for this presentation.
+            </CredenzaDescription>
+          </CredenzaHeader>
+          <Input
+            value={renameValue}
+            onChange={(event) => setRenameValue(event.target.value)}
+            placeholder="Enter a new presentation name"
+            autoFocus
+          />
+          <CredenzaFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={closeRenameDialog}
+              disabled={isRenamePending}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              disabled={
+                !renameTarget ||
+                !renameValue.trim() ||
+                renameValue.trim() === renameTarget.name ||
+                isRenamePending
+              }
+              onClick={async () => {
+                if (!renameTarget) {
+                  closeRenameDialog();
+                  return;
+                }
+
+                const nextName = renameValue.trim();
+                if (!nextName || nextName === renameTarget.name) {
+                  closeRenameDialog();
+                  return;
+                }
+
+                const renamed = await renameTarget.onRename(nextName);
+                if (renamed) {
+                  closeRenameDialog();
+                }
+              }}
+            >
+              {isRenamePending ? (
+                <Loader2 className="mr-2 size-4 animate-spin" />
+              ) : null}
+              Rename
+            </Button>
+          </CredenzaFooter>
+        </CredenzaContent>
+      </Credenza>
+
+      <AlertDialog
+        open={Boolean(deleteTarget)}
+        onOpenChange={(open) => {
+          if (!open) {
+            closeDeleteDialog();
+          }
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete presentation</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will permanently delete "{deleteTarget?.name}". This action
+              cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isDeletePending}>
+              Cancel
+            </AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              disabled={!deleteTarget || isDeletePending}
+              onClick={async (event) => {
+                event.preventDefault();
+                if (!deleteTarget) {
+                  closeDeleteDialog();
+                  return;
+                }
+
+                const deleted = await deleteTarget.onDelete();
+                if (deleted) {
+                  closeDeleteDialog();
+                }
+              }}
+            >
+              {isDeletePending ? (
+                <Loader2 className="mr-2 size-4 animate-spin" />
+              ) : null}
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </>
   );
 }
 
 export function PresentationDashboard() {
   const router = useRouter();
+  const queryClient = useQueryClient();
   const { resolvedTheme } = useTheme();
   const [documentTypeFilter, setDocumentTypeFilter] =
     useState<PresentationDocumentTypeFilterValue>(
       ALL_PRESENTATION_DOCUMENT_TYPES,
     );
-  const [isTemplateModalOpen, setIsTemplateModalOpen] = useState(false);
+  const [libraryTab, setLibraryTab] = useState<LibraryTab>("recent");
+  const [showFavoritesOnly, setShowFavoritesOnly] = useState(false);
   const { createBlank: handleCreateBlank, isCreating: isCreatingBlank } =
     useBlankPresentationCreator();
   const {
@@ -693,7 +1037,6 @@ export function PresentationDashboard() {
     scenario,
     pageBackground,
     selectedSlideTemplates,
-    setSelectedSlideTemplates,
     outlineItemIds,
     outlineTemplateOverrides,
     resetPresentationState,
@@ -711,11 +1054,250 @@ export function PresentationDashboard() {
     documentTypeFilter === ALL_PRESENTATION_DOCUMENT_TYPES
       ? undefined
       : documentTypeFilter;
+  const favoritesOnly = libraryTab === "favorites" || showFavoritesOnly;
+
+  const updateCachedPresentationFavorite = (
+    documentId: string,
+    isFavorite: boolean,
+  ) => {
+    queryClient.setQueriesData<PresentationsInfiniteData>(
+      { queryKey: PRESENTATIONS_QUERY_KEY },
+      (cachedData) => {
+        if (!cachedData) {
+          return cachedData;
+        }
+
+        return {
+          ...cachedData,
+          pages: cachedData.pages.map((page) => ({
+            ...page,
+            items: page.items.map((item) =>
+              item.id === documentId
+                ? {
+                    ...item,
+                    favorites: isFavorite
+                      ? item.favorites.length > 0
+                        ? item.favorites
+                        : [{ id: "optimistic-favorite" }]
+                      : [],
+                  }
+                : item,
+            ),
+          })),
+        };
+      },
+    );
+  };
+
+  const updateCachedPresentationTitle = (
+    documentId: string,
+    title: string,
+  ) => {
+    queryClient.setQueriesData<PresentationsInfiniteData>(
+      { queryKey: PRESENTATIONS_QUERY_KEY },
+      (cachedData) => {
+        if (!cachedData) {
+          return cachedData;
+        }
+
+        return {
+          ...cachedData,
+          pages: cachedData.pages.map((page) => ({
+            ...page,
+            items: page.items.map((item) =>
+              item.id === documentId ? { ...item, title } : item,
+            ),
+          })),
+        };
+      },
+    );
+  };
+
+  const removeCachedPresentation = (documentId: string) => {
+    queryClient.setQueriesData<PresentationsInfiniteData>(
+      { queryKey: PRESENTATIONS_QUERY_KEY },
+      (cachedData) => {
+        if (!cachedData) {
+          return cachedData;
+        }
+
+        return {
+          ...cachedData,
+          pages: cachedData.pages.map((page) => ({
+            ...page,
+            items: page.items.filter((item) => item.id !== documentId),
+          })),
+        };
+      },
+    );
+  };
+
+  const favoriteMutation = useMutation({
+    mutationFn: async ({ documentId }: FavoriteMutationVariables) => {
+      const result = await togglePresentationFavorite(documentId);
+
+      if (!result.success) {
+        throw new Error(result.message || "Failed to update favorite");
+      }
+
+      return result;
+    },
+    onMutate: async ({
+      documentId,
+      isFavorited,
+    }: FavoriteMutationVariables) => {
+      await queryClient.cancelQueries({ queryKey: PRESENTATIONS_QUERY_KEY });
+
+      const previousQueries =
+        queryClient.getQueriesData<PresentationsInfiniteData>({
+          queryKey: PRESENTATIONS_QUERY_KEY,
+        });
+
+      updateCachedPresentationFavorite(documentId, !isFavorited);
+
+      return { previousQueries };
+    },
+    onError: (error, _variables, context) => {
+      context?.previousQueries.forEach(([queryKey, previousData]) => {
+        queryClient.setQueryData(queryKey, previousData);
+      });
+
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : "Failed to update favorite",
+      );
+    },
+    onSuccess: (result, variables) => {
+      if (typeof result.isFavorite === "boolean") {
+        updateCachedPresentationFavorite(
+          variables.documentId,
+          result.isFavorite,
+        );
+      }
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: PRESENTATIONS_QUERY_KEY });
+    },
+  });
+
+  const renameMutation = useMutation({
+    mutationFn: async ({
+      documentId,
+      title,
+    }: {
+      documentId: string;
+      title: string;
+    }) => {
+      const result = await updatePresentationTitle(documentId, title);
+
+      if (!result.success) {
+        throw new Error(result.message || "Failed to rename presentation");
+      }
+
+      return result;
+    },
+    onMutate: async ({ documentId, title }) => {
+      await queryClient.cancelQueries({ queryKey: PRESENTATIONS_QUERY_KEY });
+
+      const previousQueries =
+        queryClient.getQueriesData<PresentationsInfiniteData>({
+          queryKey: PRESENTATIONS_QUERY_KEY,
+        });
+
+      updateCachedPresentationTitle(documentId, title);
+
+      return { previousQueries };
+    },
+    onError: (error, _variables, context) => {
+      context?.previousQueries.forEach(([queryKey, previousData]) => {
+        queryClient.setQueryData(queryKey, previousData);
+      });
+
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : "Failed to rename presentation",
+      );
+    },
+    onSuccess: () => {
+      toast.success("Presentation renamed");
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: PRESENTATIONS_QUERY_KEY });
+    },
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: async ({ documentId }: { documentId: string }) => {
+      const result = await deletePresentation(documentId);
+
+      if (!result.success) {
+        throw new Error(result.message || "Failed to delete presentation");
+      }
+
+      return result;
+    },
+    onMutate: async ({ documentId }) => {
+      await queryClient.cancelQueries({ queryKey: PRESENTATIONS_QUERY_KEY });
+
+      const previousQueries =
+        queryClient.getQueriesData<PresentationsInfiniteData>({
+          queryKey: PRESENTATIONS_QUERY_KEY,
+        });
+
+      removeCachedPresentation(documentId);
+
+      return { previousQueries };
+    },
+    onError: (error, _variables, context) => {
+      context?.previousQueries.forEach(([queryKey, previousData]) => {
+        queryClient.setQueryData(queryKey, previousData);
+      });
+
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : "Failed to delete presentation",
+      );
+    },
+    onSuccess: () => {
+      toast.success("Presentation deleted");
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: PRESENTATIONS_QUERY_KEY });
+    },
+  });
+
+  const duplicateMutation = useMutation({
+    mutationFn: async ({ documentId }: { documentId: string }) => {
+      const result = await duplicatePresentation(documentId);
+
+      if (!result.success || !result.presentation) {
+        throw new Error(result.message || "Failed to duplicate presentation");
+      }
+
+      return result.presentation;
+    },
+    onSuccess: (presentation) => {
+      queryClient.invalidateQueries({ queryKey: PRESENTATIONS_QUERY_KEY });
+      toast.success("Presentation duplicated");
+      router.push(`/presentation/${presentation.id}`);
+    },
+    onError: (error) => {
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : "Failed to duplicate presentation",
+      );
+    },
+  });
+
   const { data, isLoading, fetchNextPage, hasNextPage, isFetchingNextPage } =
     useInfiniteQuery({
-      queryKey: [...PRESENTATIONS_QUERY_KEY, documentTypeFilter],
+      queryKey: [...PRESENTATIONS_QUERY_KEY, documentTypeFilter, favoritesOnly],
       queryFn: async ({ pageParam = 0 }) =>
-        fetchPresentations(pageParam, typeFilter),
+        fetchPresentations(pageParam, typeFilter, { favoritesOnly }),
       getNextPageParam: (lastPage, allPages) =>
         lastPage.hasMore ? allPages.length : undefined,
       initialPageParam: 0,
@@ -738,7 +1320,42 @@ export function PresentationDashboard() {
     }),
     modifiedAt: new Date(item.updatedAt),
     isFavorited: item.favorites.length > 0,
+    isFavoritePending:
+      favoriteMutation.isPending &&
+      favoriteMutation.variables?.documentId === item.id,
+    isRenamePending:
+      renameMutation.isPending && renameMutation.variables?.documentId === item.id,
+    isDeletePending:
+      deleteMutation.isPending && deleteMutation.variables?.documentId === item.id,
+    isDuplicatePending:
+      duplicateMutation.isPending &&
+      duplicateMutation.variables?.documentId === item.id,
     onClick: () => router.push(getPresentationRoute(item)),
+    onToggleFavorite: () =>
+      favoriteMutation.mutate({
+        documentId: item.id,
+        isFavorited: item.favorites.length > 0,
+      }),
+    onRename: async (nextName) => {
+      try {
+        await renameMutation.mutateAsync({
+          documentId: item.id,
+          title: nextName,
+        });
+        return true;
+      } catch {
+        return false;
+      }
+    },
+    onDelete: async () => {
+      try {
+        await deleteMutation.mutateAsync({ documentId: item.id });
+        return true;
+      } catch {
+        return false;
+      }
+    },
+    onDuplicate: () => duplicateMutation.mutate({ documentId: item.id }),
   }));
 
   const selectedLanguageLabel =
@@ -813,26 +1430,9 @@ export function PresentationDashboard() {
     }
   };
 
-  const slideLayoutsButton = (
-    <button
-      type="button"
-      onClick={() => setIsTemplateModalOpen(true)}
-      className="inline-flex h-7 items-center gap-1.5 px-0 text-[13px] font-medium text-muted-foreground transition-colors hover:text-foreground sm:h-9 sm:gap-2 sm:rounded-full sm:border sm:border-border sm:bg-background sm:px-4 sm:text-sm sm:text-foreground sm:hover:bg-accent"
-    >
-      <LayoutGrid className="size-4" />
-      <span className="sm:hidden">Layouts</span>
-      <span className="hidden sm:inline">Slide Layouts</span>
-    </button>
-  );
-
   return (
     <NotebookPageLayout>
       <GreetingSection />
-      <OutlineTemplateModal
-        isOpen={isTemplateModalOpen}
-        mode="global"
-        onClose={() => setIsTemplateModalOpen(false)}
-      />
 
       <NotebookInputBox
         placeholder="Describe your topic or paste your content here. Our AI will structure it into a compelling presentation."
@@ -841,7 +1441,6 @@ export function PresentationDashboard() {
         onSubmit={handleGenerate}
         submitDisabled={!presentationInput.trim() || isGeneratingOutline}
         isSubmitting={isGeneratingOutline}
-        topRightContent={slideLayoutsButton}
       >
         <div className="flex min-w-0 flex-wrap items-center gap-2">
           <SettingPill icon={PanelsTopLeft} label={slidesLabel}>
@@ -916,18 +1515,6 @@ export function PresentationDashboard() {
 
           <ModelPicker shouldShowLabel={false} />
 
-          {selectedSlideTemplates.length > 0 ? (
-            <button
-              type="button"
-              onClick={() => setSelectedSlideTemplates([])}
-              className="inline-flex h-8 items-center gap-2 rounded-full border border-border bg-background px-3 text-[13px] font-medium text-foreground hover:bg-accent sm:h-9 sm:text-sm"
-            >
-              <LayoutGrid className="size-4" />
-              {selectedSlideTemplates.length} layouts
-              <X className="size-3.5" />
-            </button>
-          ) : null}
-
         </div>
       </NotebookInputBox>
 
@@ -944,6 +1531,10 @@ export function PresentationDashboard() {
         onFilterChange={(filterId) =>
           setDocumentTypeFilter(filterId as PresentationDocumentTypeFilterValue)
         }
+        activeTab={libraryTab}
+        onActiveTabChange={setLibraryTab}
+        showFavoritesOnly={showFavoritesOnly}
+        onShowFavoritesOnlyChange={setShowFavoritesOnly}
       />
 
       {hasNextPage ? (
