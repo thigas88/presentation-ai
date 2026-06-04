@@ -3,8 +3,8 @@
 import { useCompletion } from "@ai-sdk/react";
 import {
   createContext,
-  use,
   useCallback,
+  useContext,
   useRef,
   useState,
   type ReactNode,
@@ -184,7 +184,7 @@ export function SlideGenerationProvider({ children }: { children: ReactNode }) {
 }
 
 export function useSlideGeneration(): SlideGenerationContextValue {
-  const context = use(SlideGenerationContext);
+  const context = useContext(SlideGenerationContext);
   if (!context) {
     throw new Error(
       "useSlideGeneration must be used within a SlideGenerationProvider",

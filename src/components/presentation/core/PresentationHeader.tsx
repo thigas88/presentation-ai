@@ -1,6 +1,6 @@
 "use client";
 
-import { Bot, Palette } from "lucide-react";
+import { Palette } from "lucide-react";
 import * as motion from "motion/react-client";
 import { useSession } from "next-auth/react";
 import Link from "next/link";
@@ -12,7 +12,6 @@ import { updatePresentationTitle } from "@/app/_actions/notebook/presentation/pr
 import AllweoneText from "@/components/globals/allweone-logo";
 import { ExportButton } from "@/components/presentation/buttons/ExportButton";
 import { PresentButton } from "@/components/presentation/buttons/PresentButton";
-import { ShareButton } from "@/components/presentation/buttons/ShareButton";
 import { PresentationMenu } from "@/components/presentation/controls/PresentationMenu";
 import { PresentationSavingIndicator } from "@/components/presentation/core/PresentationSavingIndicator";
 import { Button } from "@/components/ui/button";
@@ -32,7 +31,6 @@ export default function PresentationHeader({ title }: PresentationHeaderProps) {
   const currentPresentationId = usePresentationState(
     (s) => s.currentPresentationId,
   );
-  const activeRightPanel = usePresentationState((s) => s.activeRightPanel);
   const isReadOnly = usePresentationState((s) => s.isReadOnly);
   const setActiveRightPanel = usePresentationState(
     (s) => s.setActiveRightPanel,
@@ -49,6 +47,7 @@ export default function PresentationHeader({ title }: PresentationHeaderProps) {
     (pathname.startsWith("/presentation/") ||
       pathname.startsWith("/share/presentation/")) &&
     !pathname.includes("generate");
+  const showPresentationTitle = pathname !== "/presentation";
 
   const isLoggedOut = status === "unauthenticated";
   const showBrand = isLoggedOut;
@@ -114,11 +113,11 @@ export default function PresentationHeader({ title }: PresentationHeaderProps) {
         {isPresentationPage && !isLoggedOut && (
           <PresentationMenu readOnly={isReadOnly} />
         )}
-        {isLoggedOut ? (
+        {isLoggedOut && showPresentationTitle ? (
           <span className="truncate text-sm font-medium text-foreground sm:hidden">
             {presentationTitle}
           </span>
-        ) : (
+        ) : !isLoggedOut && showPresentationTitle ? (
           <Input
             type="text"
             id="presentation-title-input"
@@ -149,10 +148,10 @@ export default function PresentationHeader({ title }: PresentationHeaderProps) {
               appearance: "none",
             }}
           />
-        )}
+        ) : null}
       </div>
 
-      {isLoggedOut ? (
+      {isLoggedOut && showPresentationTitle ? (
         <div className="pointer-events-none absolute top-1/2 left-1/2 w-[min(60vw,40rem)] -translate-x-1/2 -translate-y-1/2 px-3 text-center">
           <span className="line-clamp-1 text-lg font-medium text-foreground">
             {presentationTitle}
@@ -186,31 +185,6 @@ export default function PresentationHeader({ title }: PresentationHeaderProps) {
 
         {/* Export button - Only in presentation page, not outline or present mode */}
         {isPresentationPage && !isPresenting && !isReadOnly && <ExportButton />}
-
-        {/* Share button - Only in presentation page, not outline */}
-        {isPresentationPage && !isPresenting && !isReadOnly && <ShareButton />}
-
-        {/* Agent button - Only in presentation page, not outline or present mode */}
-        {isPresentationPage && !isPresenting && !isReadOnly && (
-          <Button
-            variant={activeRightPanel === "agent" ? "default" : "outline"}
-            size="sm"
-            onClick={() => {
-              setActiveRightPanel(
-                activeRightPanel === "agent" ? null : "agent",
-              );
-            }}
-            className="gap-2"
-          >
-            <Bot className="h-4 w-4" />
-            <span className="sr-only">
-              Agent
-            </span>
-            <span className="hidden sm:inline">
-              Agent
-            </span>
-          </Button>
-        )}
 
         {/* Present button - Only in presentation page, not outline */}
         {isPresentationPage && <PresentButton />}

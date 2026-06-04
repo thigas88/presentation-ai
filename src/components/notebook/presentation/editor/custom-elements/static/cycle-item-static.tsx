@@ -11,7 +11,7 @@ const LEFT_COLUMN_ALIGNMENT =
   "text-right [&_h1]:!text-right [&_h2]:!text-right [&_h3]:!text-right [&_h4]:!text-right [&_h5]:!text-right [&_h6]:!text-right [&_p]:!text-right [&_li]:!text-right";
 
 export function CycleItemStatic(props: SlateElementProps) {
-  const { isMultiColumn, side } = React.use(CycleContext);
+  const { isMultiColumn, side } = React.useContext(CycleContext);
 
   return (
     <div className="group/cycle-item relative min-w-0">

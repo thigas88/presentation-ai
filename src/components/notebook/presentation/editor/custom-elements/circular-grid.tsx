@@ -5,7 +5,7 @@ import {
   useReadOnly,
   type PlateElementProps,
 } from "platejs/react";
-import { createContext, useMemo, use, type ReactNode } from "react";
+import { createContext, useContext, useMemo, type ReactNode } from "react";
 import TextareaAutosize from "react-textarea-autosize";
 
 import { useForceUpdateChildrenOnLengthChange } from "@/hooks/presentation/useForceUpdateChildrenOnLengthChange";
@@ -202,7 +202,7 @@ function getElementId(element: CircularGridChildElement): string | undefined {
 }
 
 export function useCircularGridLayoutContext() {
-  const context = use(CircularGridLayoutContext);
+  const context = useContext(CircularGridLayoutContext);
   if (!context) {
     throw new Error(
       "useCircularGridLayoutContext must be used within a CircularGridLayoutProvider",

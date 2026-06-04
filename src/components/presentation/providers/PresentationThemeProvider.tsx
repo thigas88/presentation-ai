@@ -1,7 +1,13 @@
 "use client";
 
 import { useTheme as useGlobalTheme } from "next-themes";
-import { createContext, use, useCallback, useEffect, useState } from "react";
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useState,
+} from "react";
 
 type Theme = "light" | "dark";
 
@@ -23,7 +29,7 @@ const PresentationThemeContext = createContext<
  * it seamlessly falls back to using the global next-themes system, avoiding runtime errors.
  */
 export function usePresentationTheme() {
-  const context = use(PresentationThemeContext);
+  const context = useContext(PresentationThemeContext);
   const globalTheme = useGlobalTheme();
 
   if (context === undefined) {

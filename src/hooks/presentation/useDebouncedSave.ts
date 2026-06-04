@@ -1,5 +1,6 @@
 import { updatePresentation } from "@/app/_actions/notebook/presentation/presentationActions";
 import { buildPresentationCustomization } from "@/lib/presentation/customization";
+import { getPersistablePresentationTheme } from "@/lib/presentation/theme-resolution";
 import { usePresentationState } from "@/states/presentation-state";
 import debounce from "lodash.debounce";
 import { useCallback, useEffect } from "react";
@@ -41,6 +42,9 @@ export const useDebouncedSave = (options: UseDebouncedSaveOptions = {}) => {
           pageBackground,
           thumbnailUrl,
           customThemeData,
+          theme,
+          themeDataByTheme,
+          generatedThemeData,
           pageStyle,
           generationAspectRatio,
           textContent,
@@ -60,6 +64,10 @@ export const useDebouncedSave = (options: UseDebouncedSaveOptions = {}) => {
               slides,
             },
             title: currentPresentationTitle ?? "",
+            theme: getPersistablePresentationTheme({
+              fallbackTheme: "mystique",
+              theme,
+            }),
             outline,
             imageSource,
             presentationStyle,
@@ -67,6 +75,9 @@ export const useDebouncedSave = (options: UseDebouncedSaveOptions = {}) => {
             thumbnailUrl,
             customization: buildPresentationCustomization({
               customThemeData,
+              themeDataByTheme,
+              generatedThemeData,
+              theme,
               pageStyle,
               presentationStyle: presentationStyle ?? "",
               generationAspectRatio,
@@ -117,6 +128,9 @@ export const useDebouncedSave = (options: UseDebouncedSaveOptions = {}) => {
       pageBackground,
       thumbnailUrl,
       customThemeData,
+      theme,
+      themeDataByTheme,
+      generatedThemeData,
       pageStyle,
       generationAspectRatio,
       textContent,
@@ -137,6 +151,10 @@ export const useDebouncedSave = (options: UseDebouncedSaveOptions = {}) => {
           slides,
         },
         title: currentPresentationTitle ?? "",
+        theme: getPersistablePresentationTheme({
+          fallbackTheme: "mystique",
+          theme,
+        }),
         outline,
         language,
         imageSource,
@@ -144,6 +162,9 @@ export const useDebouncedSave = (options: UseDebouncedSaveOptions = {}) => {
         thumbnailUrl,
         customization: buildPresentationCustomization({
           customThemeData,
+          themeDataByTheme,
+          generatedThemeData,
+          theme,
           pageStyle,
           presentationStyle: presentationStyle ?? "",
           generationAspectRatio,

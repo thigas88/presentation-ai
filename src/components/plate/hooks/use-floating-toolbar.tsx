@@ -195,12 +195,15 @@ export const useFloatingToolbar = ({
 
   // so we need to wait it's collapsed at the new position before displaying the floating toolbar.
   React.useEffect(() => {
-    setWaitForCollapsedSelection(Boolean(shouldWaitForCollapsedSelection));
+    setWaitForCollapsedSelection((prev) => {
+      const next = Boolean(shouldWaitForCollapsedSelection);
+      return prev === next ? prev : next;
+    });
   }, [setWaitForCollapsedSelection, shouldWaitForCollapsedSelection]);
 
   React.useEffect(() => {
-    const mouseup = () => setMousedown(false);
-    const mousedown = () => setMousedown(true);
+    const mouseup = () => setMousedown((prev) => (prev ? false : prev));
+    const mousedown = () => setMousedown((prev) => (prev ? prev : true));
     document.addEventListener("mouseup", mouseup);
     document.addEventListener("mousedown", mousedown);
     return () => {
@@ -223,7 +226,7 @@ export const useFloatingToolbar = ({
       (readOnly && !showWhenReadOnly) ||
       isDragging // Hide toolbar when dragging is active
     ) {
-      setOpen(false);
+      setOpen((prev) => (prev ? false : prev));
     }
     // Show conditions - MODIFIED: Don't wait for collapsed selection if we have block selection
     else if (
@@ -234,7 +237,7 @@ export const useFloatingToolbar = ({
         hasCustomSelection) &&
       !isDragging // Don't show if dragging is active
     ) {
-      setOpen(true);
+      setOpen((prev) => (prev ? prev : true));
     }
   }, [
     setOpen,
@@ -262,7 +265,7 @@ export const useFloatingToolbar = ({
   const clickOutsideRef = useOnClickOutside(
     () => {
       editor.api.blockSelection.deselect();
-      setOpen(false);
+      setOpen((prev) => (prev ? false : prev));
     },
     {
       ignoreClass: "ignore-click-outside/toolbar",

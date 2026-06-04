@@ -3,7 +3,7 @@
 import "server-only";
 
 import { logger } from "@/lib/observability/server/logger";
-import { DocumentType, type Prisma } from "@prisma/client";
+import { DocumentType, type Prisma } from "@/prisma/client";
 import { auth } from "@/server/auth";
 import { db } from "@/server/db";
 

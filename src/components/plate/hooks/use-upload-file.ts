@@ -8,13 +8,7 @@ import {
 import * as z from "zod";
 
 import { type OurFileRouter } from "@/app/api/uploadthing/core";
-import { useBaseDocumentFileContext } from "@/components/files/base-document-file-context";
-import { useProjectEditorUploadContext } from "@/components/files/project-editor-upload-context";
 import { uploadFiles } from "@/hooks/globals/useUploadthing";
-import {
-  editorUploadAttachmentPayloadSchema,
-  type EditorUploadAttachmentPayload,
-} from "@/lib/files/project-editor-upload";
 
 export type UploadedFile<T = unknown> = ClientUploadedFileData<T>;
 
@@ -33,9 +27,6 @@ export function useUploadFile({
   onUploadError,
   ...props
 }: UseUploadFileProps = {}) {
-  const { baseDocumentId, baseDocumentType } = useBaseDocumentFileContext();
-  const { projectAttachmentContext, onAttachmentCreated } =
-    useProjectEditorUploadContext();
   const [uploadedFile, setUploadedFile] = React.useState<UploadedFile>();
   const [uploadingFile, setUploadingFile] = React.useState<File>();
   const [progress, setProgress] = React.useState<number>(0);
@@ -48,33 +39,16 @@ export function useUploadFile({
     try {
       const res = await uploadFiles("editorUploader", {
         ...props,
-        input:
-          props.input ||
-          (projectAttachmentContext
-            ? {
-                projectAttachmentContext,
-              }
-            : baseDocumentId && baseDocumentType
-              ? {
-                  baseDocumentId,
-                  baseDocumentType,
-                }
-              : {}),
         files: [file],
-        onUploadProgress: ({ progress }) => {
+        onUploadProgress: (event) => {
+          const { progress } = event;
           setProgress(Math.min(progress, 100));
+          props.onUploadProgress?.(event);
         },
       });
 
       const nextUploadedFile = res[0];
       setUploadedFile(nextUploadedFile);
-
-      const uploadedAttachment = getEditorUploadAttachmentPayload(
-        nextUploadedFile?.serverData,
-      );
-      if (uploadedAttachment) {
-        onAttachmentCreated?.(uploadedAttachment);
-      }
 
       onUploadComplete?.(nextUploadedFile ?? ({} as UploadedFile));
 
@@ -100,6 +74,7 @@ export function useUploadFile({
         name: file.name,
         size: file.size,
         type: file.type,
+        ufsUrl: URL.createObjectURL(file),
         url: URL.createObjectURL(file),
       } as UploadedFile;
 
@@ -133,24 +108,6 @@ export function useUploadFile({
     uploadFile: uploadThing,
     uploadingFile,
   };
-}
-
-function getEditorUploadAttachmentPayload(
-  serverData: unknown,
-): EditorUploadAttachmentPayload | undefined {
-  if (!serverData || typeof serverData !== "object") {
-    return undefined;
-  }
-
-  const attachment = (serverData as { attachment?: unknown }).attachment;
-  const parsedAttachment =
-    editorUploadAttachmentPayloadSchema.safeParse(attachment);
-
-  if (!parsedAttachment.success) {
-    return undefined;
-  }
-
-  return parsedAttachment.data;
 }
 
 export function showErrorToast(error: unknown) {

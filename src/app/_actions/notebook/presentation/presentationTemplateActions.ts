@@ -3,7 +3,6 @@
 
 import { type InputJsonValue } from "@prisma/client/runtime/client";
 
-import { extractDocumentContentByType } from "@/lib/document-content/contentSchemas";
 import { logger } from "@/lib/observability/server/logger";
 import { isBuiltInPresentationTheme } from "@/lib/presentation/theme-resolution";
 import { auth } from "@/server/auth";
@@ -99,10 +98,7 @@ export async function clonePresentationTemplate(templateId: string) {
         };
       }
 
-      const content = extractDocumentContentByType(
-        template.type,
-        template.content,
-      ) as InputJsonValue;
+      const content = template.content as InputJsonValue;
 
       const templateContentObj = template.content as Record<
         string,

@@ -486,6 +486,7 @@ interface PresentationState {
   isManualExtractionEnabled: boolean;
   setIsManualExtractionEnabled: (enabled: boolean) => void;
   selectedChunks: Chunk[];
+  setSelectedChunks: (chunks: Chunk[]) => void;
   addSelectedChunk: (chunk: Chunk) => void;
   removeSelectedChunk: (chunkId: string, ragId: string) => void;
   updateChunkSlideAssignment: (
@@ -546,7 +547,7 @@ export const usePresentationState = create<PresentationState>()(
       numSlides: 5,
       language: "en-US",
       modelProvider: "openai",
-      modelId: "llama3.1:8b",
+      modelId: "gpt-4o-mini",
       pageStyle: "default",
       presentationInput: "",
       outline: [],
@@ -659,6 +660,7 @@ export const usePresentationState = create<PresentationState>()(
       setIsManualExtractionEnabled: (enabled) =>
         set({ isManualExtractionEnabled: enabled }),
       selectedChunks: [],
+      setSelectedChunks: (selectedChunks) => set({ selectedChunks }),
       addSelectedChunk: (chunk) =>
         set((state) => ({
           selectedChunks: state.selectedChunks.some(
@@ -760,7 +762,10 @@ export const usePresentationState = create<PresentationState>()(
 
       // Unified right panel state
       activeRightPanel: null,
-      setActiveRightPanel: (panel) => set({ activeRightPanel: panel }),
+      setActiveRightPanel: (panel) =>
+        set((state) =>
+          state.activeRightPanel === panel ? state : { activeRightPanel: panel },
+        ),
       iconPickerCurrentIcon: "",
       iconPickerSelectIcon: null,
       iconPickerRemoveIcon: null,

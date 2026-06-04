@@ -1,7 +1,7 @@
 "use client";
 
 import type React from "react";
-import { createContext, use, useCallback, useState } from "react";
+import { createContext, useCallback, useContext, useState } from "react";
 
 import { type LayoutType } from "@/components/notebook/presentation/utils/parser";
 import { serializeSlidesToXml } from "@/components/notebook/presentation/utils/slide-serializer";
@@ -54,7 +54,7 @@ interface SlideEditorContextValue {
 const SlideEditorContext = createContext<SlideEditorContextValue | null>(null);
 
 export function useSlideEditorContext() {
-  const context = use(SlideEditorContext);
+  const context = useContext(SlideEditorContext);
   if (!context) {
     throw new Error(
       "useSlideEditorContext must be used within SlideEditorProvider",

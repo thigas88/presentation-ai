@@ -2,8 +2,8 @@
 
 import {
   createContext,
-  use,
   useCallback,
+  useContext,
   useMemo,
   useState,
   type ReactNode,
@@ -68,5 +68,5 @@ export function PyramidHeightProvider({ children }: { children: ReactNode }) {
 }
 
 export function usePyramidHeight() {
-  return use(PyramidHeightContext);
+  return useContext(PyramidHeightContext);
 }

@@ -16,7 +16,7 @@ const LEFT_COLUMN_ALIGNMENT =
 export const CycleItem = (
   props: StyledPlateElementProps<TCycleItemElement>,
 ) => {
-  const { isMultiColumn, side } = React.use(CycleContext);
+  const { isMultiColumn, side } = React.useContext(CycleContext);
   return (
     <PlateElement
       {...props}

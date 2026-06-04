@@ -101,6 +101,7 @@ export function useSlideContentScaling(
 
   const contentRef = useRef<HTMLDivElement | null>(null);
   const [measuredContentHeight, setMeasuredContentHeight] = useState<number>(0);
+  const measuredContentHeightRef = useRef(0);
   const containerRef = useRef<HTMLElement | null>(null);
   const resizeObserverRef = useRef<ResizeObserver | null>(null);
   // Track if we've already locked the font scale in present mode (prevents feedback loop)
@@ -112,7 +113,7 @@ export function useSlideContentScaling(
 
   const resetPresentingScaleLock = useCallback(() => {
     hasSettledScaleRef.current = false;
-    setIsScaleLocked(false);
+    setIsScaleLocked((prev) => (prev ? false : prev));
     if (scaleLockTimeoutRef.current) {
       clearTimeout(scaleLockTimeoutRef.current);
       scaleLockTimeoutRef.current = null;
@@ -130,6 +131,11 @@ export function useSlideContentScaling(
     fontSize: 16,
     presentFitScale: 1,
   });
+  const scalingRef = useRef(scaling);
+
+  useEffect(() => {
+    scalingRef.current = scaling;
+  }, [scaling]);
 
   // Memoize the calculation function to avoid recreating it
   const calculateScaling = useCallback(() => {
@@ -211,24 +217,23 @@ export function useSlideContentScaling(
       fontSize = 16;
     }
 
-    setScaling((prev) => {
-      const newScale = Math.max(scale, 0.1);
-      // Only update if values actually changed to prevent unnecessary re-renders
-      if (
-        prev.scale !== newScale ||
-        prev.fontSize !== fontSize ||
-        prev.slideWidth !== slideWidth ||
-        prev.presentFitScale !== presentFitScale
-      ) {
-        return {
-          scale: newScale,
-          slideWidth,
-          fontSize,
-          presentFitScale,
-        };
-      }
-      return prev;
-    });
+    const nextScaling = {
+      scale: Math.max(scale, 0.1),
+      slideWidth,
+      fontSize,
+      presentFitScale,
+    };
+    const currentScaling = scalingRef.current;
+
+    if (
+      currentScaling.scale !== nextScaling.scale ||
+      currentScaling.fontSize !== nextScaling.fontSize ||
+      currentScaling.slideWidth !== nextScaling.slideWidth ||
+      currentScaling.presentFitScale !== nextScaling.presentFitScale
+    ) {
+      scalingRef.current = nextScaling;
+      setScaling(nextScaling);
+    }
   }, [
     isPresenting,
     formatCategory,
@@ -310,12 +315,10 @@ export function useSlideContentScaling(
       const height = isPresenting
         ? node.scrollHeight || 0
         : node.offsetHeight || 0;
-      setMeasuredContentHeight((prev) => {
-        if (prev !== height) {
-          return height;
-        }
-        return prev;
-      });
+      if (measuredContentHeightRef.current !== height) {
+        measuredContentHeightRef.current = height;
+        setMeasuredContentHeight(height);
+      }
     };
 
     updateHeight();
@@ -343,7 +346,7 @@ export function useSlideContentScaling(
     }
 
     scaleLockTimeoutRef.current = setTimeout(() => {
-      setIsScaleLocked(true);
+      setIsScaleLocked((prev) => (prev ? prev : true));
     }, 250);
 
     return () => {

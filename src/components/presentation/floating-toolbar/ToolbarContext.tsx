@@ -131,7 +131,7 @@ function getStringColor(value: unknown): string | undefined {
 }
 
 export function useToolbarContext() {
-  const context = React.use(ToolbarContext);
+  const context = React.useContext(ToolbarContext);
   if (!context) {
     throw new Error("useToolbarContext must be used within a ToolbarProvider");
   }

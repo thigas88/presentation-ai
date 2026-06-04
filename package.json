@@ -5,8 +5,9 @@
   "type": "module",
   "scripts": {
     "build": "next build --turbo",
-    "db:push": "prisma db push",
+    "db:push": "prisma generate && prisma db push",
     "db:studio": "prisma studio",
+    "db:generate": "prisma generate",
     "dev": "next dev --turbo",
     "postinstall": "prisma generate",
     "lint": "biome lint .",
@@ -25,7 +26,7 @@
     "@ai-sdk/react": "^3.0.75",
     "@antv/infographic": "0.2.19",
     "@ariakit/react": "^0.4.17",
-    "@auth/prisma-adapter": "^1.6.0",
+    "@auth/prisma-adapter": "^2.11.1",
     "@dnd-kit/core": "^6.3.1",
     "@dnd-kit/sortable": "^10.0.0",
     "@dnd-kit/utilities": "^3.2.2",
@@ -78,7 +79,10 @@
     "@platejs/toc": "^53.0.0",
     "@platejs/toggle": "^53.0.0",
     "@platejs/utils": "53.0.3",
-    "@prisma/client": "^6.13.0",
+    "@prisma/adapter-neon": "^7.0.1",
+    "@prisma/adapter-pg": "^7.0.1",
+    "@prisma/client": "^7.0.1",
+    "@prisma/instrumentation": "^7.4.2",
     "@radix-ui/react-accordion": "^1.2.11",
     "@radix-ui/react-alert-dialog": "^1.1.14",
     "@radix-ui/react-aspect-ratio": "^1.1.7",
@@ -200,7 +204,7 @@
     "prettier": "^3.5.3",
     "prettier-plugin-organize-imports": "^4.3.0",
     "prettier-plugin-tailwindcss": "^0.7.2",
-    "prisma": "^6.13.0",
+    "prisma": "^7.0.1",
     "tailwind-scrollbar": "^4.0.2",
     "tailwind-scrollbar-hide": "^2.0.0",
     "tailwindcss": "^4.2.2",
@@ -209,28 +213,5 @@
     "typescript": "^5.9.2",
     "webpack": "^5.97.1"
   },
-  "packageManager": "pnpm@10.17.0",
-  "pnpm": {
-    "peerDependencyRules": {
-      "allowAny": [
-        "react",
-        "react-dom",
-        "@types/react"
-      ]
-    },
-    "onlyBuiltDependencies": [
-      "@prisma/client",
-      "@prisma/engines",
-      "@swc/core",
-      "canvas",
-      "core-js",
-      "es5-ext",
-      "esbuild",
-      "msgpackr-extract",
-      "prisma",
-      "protobufjs",
-      "sharp",
-      "unrs-resolver"
-    ]
-  }
+  "packageManager": "pnpm@11.1.3"
 }
