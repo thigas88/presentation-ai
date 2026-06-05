@@ -1,14 +1,23 @@
 "use server";
 
 import { type PlateSlide } from "@/components/notebook/presentation/utils/parser";
+import { type NotebookAgentToolCall } from "@/lib/notebook/agent-activity";
+import { type NotebookSelectedChunk } from "@/lib/notebook/attachments";
 import { type PresentationCustomization } from "@/lib/presentation/customization";
 import { getPresentationThumbnailUrl } from "@/lib/presentation/thumbnail";
+import { isPresentationAutoTheme } from "@/lib/presentation/theme-resolution";
 import { auth } from "@/server/auth";
 import { db } from "@/server/db";
 import { canEditDocument, canReadDocument } from "@/server/share/authorization";
 import { normalizeShareEmail } from "@/server/share/utils";
-import { type InputJsonValue } from "@prisma/client/runtime/library";
+import { type InputJsonValue } from "@prisma/client/runtime/client";
 import { notFound } from "next/navigation";
+
+export type PresentationOwnerProfile = {
+  id: string;
+  image: string | null;
+  name: string | null;
+};
 
 export async function createPresentation({
   content,
@@ -47,7 +56,7 @@ export async function createPresentation({
         presentation: {
           create: {
             content: content as unknown as InputJsonValue,
-            theme,
+            ...(!isPresentationAutoTheme(theme) ? { theme } : {}),
             imageSource,
             presentationStyle,
             customization: customization as InputJsonValue | undefined,
@@ -79,16 +88,19 @@ export async function createEmptyPresentation({
   title,
   theme = "mystique",
   language = "en-US",
+  customization,
 }: {
   title: string;
   theme?: string;
   language?: string;
+  customization?: PresentationCustomization;
 }) {
   return createPresentation({
     content: { slides: [] },
     title,
     theme,
     language,
+    customization,
   });
 }
 
@@ -124,6 +136,8 @@ export async function updatePresentation({
   theme,
   outline,
   searchResults,
+  toolCalls,
+  selectedChunks,
   imageSource,
   presentationStyle,
   customization,
@@ -140,6 +154,8 @@ export async function updatePresentation({
   prompt?: string;
   outline?: string[];
   searchResults?: Array<{ query: string; results: unknown[] }>;
+  toolCalls?: NotebookAgentToolCall[];
+  selectedChunks?: NotebookSelectedChunk[];
   imageSource?: string;
   presentationStyle?: string;
   customization?: PresentationCustomization;
@@ -163,6 +179,9 @@ export async function updatePresentation({
   }
 
   try {
+    const shouldPersistTheme =
+      theme !== undefined && !isPresentationAutoTheme(theme);
+
     const presentation = await db.baseDocument.update({
       where: { id },
       data: {
@@ -175,13 +194,15 @@ export async function updatePresentation({
           update: {
             prompt,
             content: content as unknown as InputJsonValue,
-            theme,
+            ...(shouldPersistTheme ? { theme } : {}),
             imageSource,
             presentationStyle,
             customization: customization as InputJsonValue | undefined,
             language,
             outline,
             searchResults: searchResults as unknown as InputJsonValue,
+            toolCalls: toolCalls as unknown as InputJsonValue,
+            selectedChunks: selectedChunks as unknown as InputJsonValue,
           },
         },
       },
@@ -202,6 +223,57 @@ export async function updatePresentation({
       message: "Failed to update presentation",
     };
   }
+}
+
+export async function getPresentationOwner(id: string): Promise<
+  | {
+      success: true;
+      owner: PresentationOwnerProfile;
+    }
+  | {
+      success: false;
+      message: string;
+    }
+> {
+  const session = await auth();
+  const canRead = await canReadDocument(id, {
+    userId: session?.user.id ?? null,
+    userEmail: session?.user.email
+      ? normalizeShareEmail(session.user.email)
+      : null,
+  });
+
+  if (!canRead) {
+    return {
+      success: false,
+      message: "Unauthorized access",
+    };
+  }
+
+  const presentation = await db.baseDocument.findUnique({
+    where: { id },
+    select: {
+      user: {
+        select: {
+          id: true,
+          image: true,
+          name: true,
+        },
+      },
+    },
+  });
+
+  if (!presentation) {
+    return {
+      success: false,
+      message: "Presentation not found",
+    };
+  }
+
+  return {
+    success: true,
+    owner: presentation.user,
+  };
 }
 
 export async function updatePresentationTitle(id: string, title: string) {
@@ -424,6 +496,14 @@ export async function duplicatePresentation(id: string, newTitle?: string) {
             theme: original.presentation.theme,
             customization:
               (original.presentation.customization as InputJsonValue) ??
+              undefined,
+            searchResults:
+              (original.presentation.searchResults as InputJsonValue) ??
+              undefined,
+            toolCalls:
+              (original.presentation.toolCalls as InputJsonValue) ?? undefined,
+            selectedChunks:
+              (original.presentation.selectedChunks as InputJsonValue) ??
               undefined,
           },
         },
